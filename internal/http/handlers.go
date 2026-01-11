@@ -3,6 +3,7 @@ package http
 import (
 	"encoding/json"
 	"log"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -11,6 +12,30 @@ import (
 
 type Handler struct {
 	wnppRepo *repository.WNPPRepository
+}
+
+var validWNPPTypes = map[string]struct{}{
+	"ITP": {},
+	"RFP": {},
+	"O":   {},
+	"ITA": {},
+	"RFH": {},
+	"RFA": {},
+}
+
+func filterValidTypes(input []string) ([]string, error) {
+	if len(input) == 0 {
+		return nil, nil
+	}
+
+	out := make([]string, 0, len(input))
+	for _, t := range input {
+		if _, ok := validWNPPTypes[t]; !ok {
+			return nil, fmt.Errorf("invalid type: %s", t)
+		}
+		out = append(out, t)
+	}
+	return out, nil
 }
 
 func NewHandler(wnppRepo *repository.WNPPRepository) *Handler {
@@ -25,7 +50,14 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) WNPP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	types := r.URL.Query()["type"] // <-- MULTI TYPE
+	rawTypes := r.URL.Query()["type"]
+
+    types, err := filterValidTypes(rawTypes)
+    if err != nil {
+	    http.Error(w, err.Error(), http.StatusBadRequest)
+	    return
+    }
+
 	search := r.URL.Query().Get("q")
 	order := r.URL.Query().Get("order")
 
@@ -58,7 +90,14 @@ func (h *Handler) WNPP(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) WNPPCount(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	types := r.URL.Query()["type"]
+	rawTypes := r.URL.Query()["type"]
+
+    types, err := filterValidTypes(rawTypes)
+    if err != nil {
+	    http.Error(w, err.Error(), http.StatusBadRequest)
+	    return
+    }
+	
 	search := r.URL.Query().Get("q")
 
 	total, err := h.wnppRepo.Count(ctx, types, search)
