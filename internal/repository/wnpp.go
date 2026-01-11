@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -21,8 +22,8 @@ type WNPPItem struct {
 	LastModified time.Time `json:"last_modified"`
 	Title        string    `json:"title"`
 
-	Installs     *int      `json:"installs"` // nullable
-	Users        *int      `json:"users"`    // nullable
+	Installs *int `json:"installs"`
+	Users    *int `json:"users"`
 }
 
 type WNPPRepository struct {
@@ -39,9 +40,10 @@ func (r *WNPPRepository) List(
 	offset int,
 	orderBy string,
 	typ string,
+	search string,
 ) ([]WNPPItem, error) {
 
-	// whitelist ordering (VERY IMPORTANT)
+	// ---- ORDER BY whitelist
 	orderClause := "b.arrival DESC"
 	switch orderBy {
 	case "arrival":
@@ -52,25 +54,39 @@ func (r *WNPPRepository) List(
 		orderClause = "p.vote DESC NULLS LAST"
 	}
 
-	whereClause := `
+	baseWhere := `
 WHERE
     b.package = 'wnpp'
     AND b.status <> 'done'
 `
-	args := []any{limit, offset}
-	//argPos := 3
+
+	argsBase := []any{}
+	argPosBase := 1
 
 	if typ != "" {
-		whereClause += " AND b.title ~ $3"
-		args = append(args, "^"+typ+": ")
+		baseWhere += " AND b.title ~ $" + strconv.Itoa(argPosBase)
+		argsBase = append(argsBase, "^"+typ+": ")
+		argPosBase++
 	}
 
-	query := `
+	// ---------- 1) SOURCE (package name) PREFIX SEARCH ----------
+	sourceWhere := baseWhere
+	args := append([]any{}, argsBase...)
+	argPos := argPosBase
+
+	if search != "" {
+		sourceWhere += `
+ AND substring(b.title, '^[A-Z]{1,3}: ([^ ]+)') ILIKE $` + strconv.Itoa(argPos)
+		args = append(args, search+"%")
+		argPos++
+	}
+
+	sourceQuery := `
 SELECT
-    b.id                                         AS bug_id,
-    substring(b.title, '^([A-Z]{1,3}): .*')      AS type,
-    substring(b.title, '^[A-Z]{1,3}: ([^ ]+)')   AS source,
-    b.package                                    AS wnpp_package,
+    b.id                                       AS bug_id,
+    substring(b.title, '^([A-Z]{1,3}): .*')    AS type,
+    substring(b.title, '^[A-Z]{1,3}: ([^ ]+)') AS source,
+    b.package                                  AS wnpp_package,
     b.arrival,
     b.submitter,
     b.owner,
@@ -78,18 +94,78 @@ SELECT
     b.owner_email,
     b.last_modified,
     b.title,
-    p.insts                                      AS installs,
-    p.vote                                       AS users
+    p.insts                                    AS installs,
+    p.vote                                     AS users
 FROM public.bugs b
 LEFT JOIN public.popcon p
        ON p.package = substring(
             b.title,
             '^[A-Z]{1,3}: ([^ ]+)'
           )
-` + whereClause + `
+` + sourceWhere + `
 ORDER BY ` + orderClause + `
-LIMIT $1 OFFSET $2
-`
+LIMIT $` + strconv.Itoa(argPos) + `
+OFFSET $` + strconv.Itoa(argPos+1)
+
+	argsSource := append(args, limit, offset)
+
+	items, err := r.runQuery(ctx, sourceQuery, argsSource, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	// If we found package-name matches, return them immediately
+	if len(items) > 0 || search == "" {
+		return items, nil
+	}
+
+	// ---------- 2) DESCRIPTION SEARCH (fallback) ----------
+	descWhere := baseWhere
+	args = append([]any{}, argsBase...)
+	argPos = argPosBase
+
+	descWhere += `
+ AND b.title ILIKE '% -- %' || $` + strconv.Itoa(argPos) + ` || '%'`
+	args = append(args, search)
+	argPos++
+
+	descQuery := `
+SELECT
+    b.id                                       AS bug_id,
+    substring(b.title, '^([A-Z]{1,3}): .*')    AS type,
+    substring(b.title, '^[A-Z]{1,3}: ([^ ]+)') AS source,
+    b.package                                  AS wnpp_package,
+    b.arrival,
+    b.submitter,
+    b.owner,
+    b.owner_name,
+    b.owner_email,
+    b.last_modified,
+    b.title,
+    p.insts                                    AS installs,
+    p.vote                                     AS users
+FROM public.bugs b
+LEFT JOIN public.popcon p
+       ON p.package = substring(
+            b.title,
+            '^[A-Z]{1,3}: ([^ ]+)'
+          )
+` + descWhere + `
+ORDER BY ` + orderClause + `
+LIMIT $` + strconv.Itoa(argPos) + `
+OFFSET $` + strconv.Itoa(argPos+1)
+
+	argsDesc := append(args, limit, offset)
+
+	return r.runQuery(ctx, descQuery, argsDesc, limit)
+}
+
+func (r *WNPPRepository) runQuery(
+	ctx context.Context,
+	query string,
+	args []any,
+	limit int,
+) ([]WNPPItem, error) {
 
 	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
@@ -101,8 +177,7 @@ LIMIT $1 OFFSET $2
 
 	for rows.Next() {
 		var item WNPPItem
-
-		err := rows.Scan(
+		if err := rows.Scan(
 			&item.BugID,
 			&item.Type,
 			&item.Source,
@@ -116,44 +191,74 @@ LIMIT $1 OFFSET $2
 			&item.Title,
 			&item.Installs,
 			&item.Users,
-		)
-		if err != nil {
+		); err != nil {
 			return nil, err
 		}
-
 		items = append(items, item)
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return items, nil
+	return items, rows.Err()
 }
 
-func (r *WNPPRepository) Count(ctx context.Context, typ string) (int, error) {
-	whereClause := `
+func (r *WNPPRepository) Count(
+	ctx context.Context,
+	typ string,
+	search string,
+) (int, error) {
+
+	baseWhere := `
 WHERE
     package = 'wnpp'
     AND status <> 'done'
 `
-	args := []any{}
+
+	argsBase := []any{}
+	argPosBase := 1
 
 	if typ != "" {
-		whereClause += " AND title ~ $1"
-		args = append(args, "^"+typ+": ")
+		baseWhere += " AND title ~ $" + strconv.Itoa(argPosBase)
+		argsBase = append(argsBase, "^"+typ+": ")
+		argPosBase++
 	}
 
-	query := `
-SELECT COUNT(*)
-FROM public.bugs
-` + whereClause
+	// ---- 1) source count
+	if search != "" {
+		where := baseWhere + `
+ AND substring(title, '^[A-Z]{1,3}: ([^ ]+)') ILIKE $` + strconv.Itoa(argPosBase)
+
+		args := append(argsBase, search+"%")
+
+		var count int
+		err := r.db.QueryRow(
+			ctx,
+			`SELECT COUNT(*) FROM public.bugs `+where,
+			args...,
+		).Scan(&count)
+		if err != nil {
+			return 0, err
+		}
+
+		if count > 0 {
+			return count, nil
+		}
+	}
+
+	// ---- 2) description count fallback
+	where := baseWhere
+	args := append([]any{}, argsBase...)
+
+	if search != "" {
+		where += `
+ AND title ILIKE '% -- %' || $` + strconv.Itoa(argPosBase) + ` || '%'`
+		args = append(args, search)
+	}
 
 	var total int
-	err := r.db.QueryRow(ctx, query, args...).Scan(&total)
-	if err != nil {
-		return 0, err
-	}
+	err := r.db.QueryRow(
+		ctx,
+		`SELECT COUNT(*) FROM public.bugs `+where,
+		args...,
+	).Scan(&total)
 
-	return total, nil
+	return total, err
 }
