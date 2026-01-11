@@ -2,9 +2,9 @@ package http
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
-	"log"
 
 	"github.com/GabrielBarrantes/wnpp-backend-service/internal/repository"
 )
@@ -25,10 +25,11 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) WNPP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	typ := r.URL.Query().Get("type")
+	types := r.URL.Query()["type"] // <-- MULTI TYPE
 	search := r.URL.Query().Get("q")
-	log.Println(search)
 	order := r.URL.Query().Get("order")
+
+	log.Println("search:", search)
 
 	limit := 50
 	offset := 0
@@ -44,7 +45,7 @@ func (h *Handler) WNPP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	items, err := h.wnppRepo.List(ctx, limit, offset, order, typ, search)
+	items, err := h.wnppRepo.List(ctx, limit, offset, order, types, search)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -57,10 +58,10 @@ func (h *Handler) WNPP(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) WNPPCount(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	typ := r.URL.Query().Get("type")
+	types := r.URL.Query()["type"]
 	search := r.URL.Query().Get("q")
 
-	total, err := h.wnppRepo.Count(ctx, typ, search)
+	total, err := h.wnppRepo.Count(ctx, types, search)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

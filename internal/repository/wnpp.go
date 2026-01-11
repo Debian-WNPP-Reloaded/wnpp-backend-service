@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -39,7 +40,7 @@ func (r *WNPPRepository) List(
 	limit int,
 	offset int,
 	orderBy string,
-	typ string,
+	types []string,
 	search string,
 ) ([]WNPPItem, error) {
 
@@ -63,13 +64,16 @@ WHERE
 	argsBase := []any{}
 	argPosBase := 1
 
-	if typ != "" {
+	// ---- TYPE FILTER (multi)
+	if len(types) > 0 {
 		baseWhere += " AND b.title ~ $" + strconv.Itoa(argPosBase)
-		argsBase = append(argsBase, "^"+typ+": ")
+		argsBase = append(argsBase, "^("+strings.Join(types, "|")+"): ")
 		argPosBase++
 	}
 
-	// ---------- 1) SOURCE (package name) PREFIX SEARCH ----------
+	// ============================================================
+	// 1) PACKAGE NAME PREFIX SEARCH
+	// ============================================================
 	sourceWhere := baseWhere
 	args := append([]any{}, argsBase...)
 	argPos := argPosBase
@@ -107,19 +111,19 @@ ORDER BY ` + orderClause + `
 LIMIT $` + strconv.Itoa(argPos) + `
 OFFSET $` + strconv.Itoa(argPos+1)
 
-	argsSource := append(args, limit, offset)
-
-	items, err := r.runQuery(ctx, sourceQuery, argsSource, limit)
+	items, err := r.runQuery(ctx, sourceQuery, append(args, limit, offset), limit)
 	if err != nil {
 		return nil, err
 	}
 
-	// If we found package-name matches, return them immediately
+	// If package-name matches exist OR no search term → return
 	if len(items) > 0 || search == "" {
 		return items, nil
 	}
 
-	// ---------- 2) DESCRIPTION SEARCH (fallback) ----------
+	// ============================================================
+	// 2) DESCRIPTION SEARCH (fallback)
+	// ============================================================
 	descWhere := baseWhere
 	args = append([]any{}, argsBase...)
 	argPos = argPosBase
@@ -155,9 +159,7 @@ ORDER BY ` + orderClause + `
 LIMIT $` + strconv.Itoa(argPos) + `
 OFFSET $` + strconv.Itoa(argPos+1)
 
-	argsDesc := append(args, limit, offset)
-
-	return r.runQuery(ctx, descQuery, argsDesc, limit)
+	return r.runQuery(ctx, descQuery, append(args, limit, offset), limit)
 }
 
 func (r *WNPPRepository) runQuery(
@@ -202,7 +204,7 @@ func (r *WNPPRepository) runQuery(
 
 func (r *WNPPRepository) Count(
 	ctx context.Context,
-	typ string,
+	types []string,
 	search string,
 ) (int, error) {
 
@@ -215,13 +217,13 @@ WHERE
 	argsBase := []any{}
 	argPosBase := 1
 
-	if typ != "" {
+	if len(types) > 0 {
 		baseWhere += " AND title ~ $" + strconv.Itoa(argPosBase)
-		argsBase = append(argsBase, "^"+typ+": ")
+		argsBase = append(argsBase, "^("+strings.Join(types, "|")+"): ")
 		argPosBase++
 	}
 
-	// ---- 1) source count
+	// ---- 1) package-name count
 	if search != "" {
 		where := baseWhere + `
  AND substring(title, '^[A-Z]{1,3}: ([^ ]+)') ILIKE $` + strconv.Itoa(argPosBase)
@@ -229,15 +231,10 @@ WHERE
 		args := append(argsBase, search+"%")
 
 		var count int
-		err := r.db.QueryRow(
-			ctx,
-			`SELECT COUNT(*) FROM public.bugs `+where,
-			args...,
-		).Scan(&count)
+		err := r.db.QueryRow(ctx, `SELECT COUNT(*) FROM public.bugs `+where, args...).Scan(&count)
 		if err != nil {
 			return 0, err
 		}
-
 		if count > 0 {
 			return count, nil
 		}
@@ -254,11 +251,6 @@ WHERE
 	}
 
 	var total int
-	err := r.db.QueryRow(
-		ctx,
-		`SELECT COUNT(*) FROM public.bugs `+where,
-		args...,
-	).Scan(&total)
-
+	err := r.db.QueryRow(ctx, `SELECT COUNT(*) FROM public.bugs `+where, args...).Scan(&total)
 	return total, err
 }
