@@ -2,8 +2,8 @@ package http
 
 import (
 	"encoding/json"
-	"log"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -50,13 +50,30 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) WNPP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	// ---- type filter (multi)
 	rawTypes := r.URL.Query()["type"]
+	types, err := filterValidTypes(rawTypes)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
-    types, err := filterValidTypes(rawTypes)
-    if err != nil {
-	    http.Error(w, err.Error(), http.StatusBadRequest)
-	    return
-    }
+	// ---- owner filter (tri-state)
+	ownerParam := r.URL.Query().Get("owner")
+	var owner *bool
+	if ownerParam != "" {
+		switch ownerParam {
+		case "true":
+			v := true
+			owner = &v
+		case "false":
+			v := false
+			owner = &v
+		default:
+			http.Error(w, "invalid owner parameter (must be true or false)", http.StatusBadRequest)
+			return
+		}
+	}
 
 	search := r.URL.Query().Get("q")
 	order := r.URL.Query().Get("order")
@@ -77,7 +94,15 @@ func (h *Handler) WNPP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	items, err := h.wnppRepo.List(ctx, limit, offset, order, types, search)
+	items, err := h.wnppRepo.List(
+		ctx,
+		limit,
+		offset,
+		order,
+		types,
+		search,
+		owner,
+	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -91,16 +116,32 @@ func (h *Handler) WNPPCount(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	rawTypes := r.URL.Query()["type"]
+	types, err := filterValidTypes(rawTypes)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
-    types, err := filterValidTypes(rawTypes)
-    if err != nil {
-	    http.Error(w, err.Error(), http.StatusBadRequest)
-	    return
-    }
-	
+	// ---- owner filter (tri-state)
+	ownerParam := r.URL.Query().Get("owner")
+	var owner *bool
+	if ownerParam != "" {
+		switch ownerParam {
+		case "true":
+			v := true
+			owner = &v
+		case "false":
+			v := false
+			owner = &v
+		default:
+			http.Error(w, "invalid owner parameter (must be true or false)", http.StatusBadRequest)
+			return
+		}
+	}
+
 	search := r.URL.Query().Get("q")
 
-	total, err := h.wnppRepo.Count(ctx, types, search)
+	total, err := h.wnppRepo.Count(ctx, types, search, owner)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

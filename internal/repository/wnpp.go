@@ -42,6 +42,7 @@ func (r *WNPPRepository) List(
 	orderBy string,
 	types []string,
 	search string,
+	owner *bool,
 ) ([]WNPPItem, error) {
 
 	// ---- ORDER BY whitelist
@@ -69,6 +70,15 @@ WHERE
 		baseWhere += " AND b.title ~ $" + strconv.Itoa(argPosBase)
 		argsBase = append(argsBase, "^("+strings.Join(types, "|")+"): ")
 		argPosBase++
+	}
+
+	// ---- OWNER FILTER (tri-state)
+	if owner != nil {
+		if *owner {
+			baseWhere += " AND b.owner IS NOT NULL AND b.owner <> ''"
+		} else {
+			baseWhere += " AND (b.owner IS NULL OR b.owner = '')"
+		}
 	}
 
 	// ============================================================
@@ -116,7 +126,7 @@ OFFSET $` + strconv.Itoa(argPos+1)
 		return nil, err
 	}
 
-	// If package-name matches exist OR no search term → return
+	// If matches exist OR no search term → return
 	if len(items) > 0 || search == "" {
 		return items, nil
 	}
@@ -206,6 +216,7 @@ func (r *WNPPRepository) Count(
 	ctx context.Context,
 	types []string,
 	search string,
+	owner *bool,
 ) (int, error) {
 
 	baseWhere := `
@@ -217,10 +228,20 @@ WHERE
 	argsBase := []any{}
 	argPosBase := 1
 
+	// ---- TYPE FILTER
 	if len(types) > 0 {
 		baseWhere += " AND title ~ $" + strconv.Itoa(argPosBase)
 		argsBase = append(argsBase, "^("+strings.Join(types, "|")+"): ")
 		argPosBase++
+	}
+
+	// ---- OWNER FILTER
+	if owner != nil {
+		if *owner {
+			baseWhere += " AND owner IS NOT NULL AND owner <> ''"
+		} else {
+			baseWhere += " AND (owner IS NULL OR owner = '')"
+		}
 	}
 
 	// ---- 1) package-name count
