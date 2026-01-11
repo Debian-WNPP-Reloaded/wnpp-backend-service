@@ -24,6 +24,7 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) WNPP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	typ := r.URL.Query().Get("type")
 
 	limit := 50
 	offset := 0
@@ -40,7 +41,7 @@ func (h *Handler) WNPP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	items, err := h.wnppRepo.List(ctx, limit, offset, order)
+	items, err := h.wnppRepo.List(ctx, limit, offset, order, typ)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -52,8 +53,9 @@ func (h *Handler) WNPP(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) WNPPCount(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	typ := r.URL.Query().Get("type")
 
-	total, err := h.wnppRepo.Count(ctx)
+	total, err := h.wnppRepo.Count(ctx, typ)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

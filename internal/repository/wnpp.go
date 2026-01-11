@@ -38,6 +38,7 @@ func (r *WNPPRepository) List(
 	limit int,
 	offset int,
 	orderBy string,
+	typ string,
 ) ([]WNPPItem, error) {
 
 	// whitelist ordering (VERY IMPORTANT)
@@ -49,6 +50,19 @@ func (r *WNPPRepository) List(
 		orderClause = "p.insts DESC NULLS LAST"
 	case "users":
 		orderClause = "p.vote DESC NULLS LAST"
+	}
+
+	whereClause := `
+WHERE
+    b.package = 'wnpp'
+    AND b.status <> 'done'
+`
+	args := []any{limit, offset}
+	//argPos := 3
+
+	if typ != "" {
+		whereClause += " AND b.title ~ $3"
+		args = append(args, "^"+typ+": ")
 	}
 
 	query := `
@@ -72,14 +86,12 @@ LEFT JOIN public.popcon p
             b.title,
             '^[A-Z]{1,3}: ([^ ]+)'
           )
-WHERE
-    b.package = 'wnpp'
-    AND b.status <> 'done'
+` + whereClause + `
 ORDER BY ` + orderClause + `
 LIMIT $1 OFFSET $2
 `
 
-	rows, err := r.db.Query(ctx, query, limit, offset)
+	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -119,17 +131,26 @@ LIMIT $1 OFFSET $2
 	return items, nil
 }
 
-func (r *WNPPRepository) Count(ctx context.Context) (int, error) {
-	query := `
-SELECT COUNT(*)
-FROM public.bugs
+func (r *WNPPRepository) Count(ctx context.Context, typ string) (int, error) {
+	whereClause := `
 WHERE
     package = 'wnpp'
     AND status <> 'done'
 `
-	var total int
+	args := []any{}
 
-	err := r.db.QueryRow(ctx, query).Scan(&total)
+	if typ != "" {
+		whereClause += " AND title ~ $1"
+		args = append(args, "^"+typ+": ")
+	}
+
+	query := `
+SELECT COUNT(*)
+FROM public.bugs
+` + whereClause
+
+	var total int
+	err := r.db.QueryRow(ctx, query, args...).Scan(&total)
 	if err != nil {
 		return 0, err
 	}
