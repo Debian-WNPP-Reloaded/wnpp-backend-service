@@ -10,6 +10,8 @@ import (
 	dbpkg "github.com/GabrielBarrantes/wnpp-backend-service/internal/db"
 	httppkg "github.com/GabrielBarrantes/wnpp-backend-service/internal/http"
 	"github.com/GabrielBarrantes/wnpp-backend-service/internal/repository"
+
+	"github.com/GabrielBarrantes/wnpp-backend-service/internal/middleware"
 )
 
 func main() {
@@ -31,6 +33,14 @@ func main() {
 	mux.HandleFunc("/api/wnpp", handler.WNPP)
 	mux.HandleFunc("/api/wnpp/count", handler.WNPPCount)
 
-	log.Println("Listening on :8080")
-	log.Fatal(http.ListenAndServe(":8080", mux))
+	corsMux := middleware.CORS(mux)
+
+	log.Println("Server running on :8080")
+	err2 := http.ListenAndServe(":8080", corsMux)
+	if err2 != nil {
+		log.Fatal(err2)
+	}
+
+	//log.Println("Listening on :8080")
+	//log.Fatal(http.ListenAndServe(":8080", mux))
 }
