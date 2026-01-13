@@ -56,7 +56,7 @@ jobs:
         run: echo "No tests yet, placeholder for Postman/new tests"
 
   docker:
-    name: Build & Push Docker Image
+    name: dockerhub
     runs-on: ubuntu-latest
     needs: [build, test]
     env:
