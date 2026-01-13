@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/GabrielBarrantes/wnpp-backend-service/internal/repository"
+	"github.com/Debian-WNPP-Reloaded/wnpp-backend-service/internal/repository"
 )
 
 type Handler struct {

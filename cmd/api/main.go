@@ -7,11 +7,11 @@ import (
 	"os"
 	"time"
 
-	dbpkg "github.com/GabrielBarrantes/wnpp-backend-service/internal/db"
-	httppkg "github.com/GabrielBarrantes/wnpp-backend-service/internal/http"
-	"github.com/GabrielBarrantes/wnpp-backend-service/internal/repository"
+	dbpkg "github.com/Debian-WNPP-Reloaded/wnpp-backend-service/internal/db"
+	httppkg "github.com/Debian-WNPP-Reloaded/wnpp-backend-service/internal/http"
+	"github.com/Debian-WNPP-Reloaded/wnpp-backend-service/internal/repository"
 
-	"github.com/GabrielBarrantes/wnpp-backend-service/internal/middleware"
+	"github.com/Debian-WNPP-Reloaded/wnpp-backend-service/internal/middleware"
 )
 
 func main() {
