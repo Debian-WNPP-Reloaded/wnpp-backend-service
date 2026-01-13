@@ -86,11 +86,11 @@ jobs:
       - name: Build Docker image
         run: |
           docker build \
-            -t ${{ vars.DOCKERHUB_USERNAME }}/backend-service:latest \
-            -t ${{ vars.DOCKERHUB_USERNAME }}/backend-service:${{ env.SHORT_SHA }} \
+            -t ${{ vars.DOCKERHUB_USERNAME }}/wnpp-reloaded-backend-service:latest \
+            -t ${{ vars.DOCKERHUB_USERNAME }}/wnpp-reloaded-backend-service${{ env.SHORT_SHA }} \
             .
 
       - name: Push Docker image
         run: |
-          docker push ${{ vars.DOCKERHUB_USERNAME }}/backend-service:latest
-          docker push ${{ vars.DOCKERHUB_USERNAME }}/backend-service:${{ env.SHORT_SHA }}
+          docker push ${{ vars.DOCKERHUB_USERNAME }}/wnpp-reloaded-backend-service:latest
+          docker push ${{ vars.DOCKERHUB_USERNAME }}/wnpp-reloaded-backend-service:${{ env.SHORT_SHA }}
