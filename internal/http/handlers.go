@@ -3,7 +3,6 @@ package http
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 
@@ -79,7 +78,7 @@ func (h *Handler) WNPP(w http.ResponseWriter, r *http.Request) {
 	order := r.URL.Query().Get("order")
 	direction := r.URL.Query().Get("direction")
 
-	log.Println("search:", search)
+	//log.Println("URL:", r.URL)
 
 	limit := 50
 	offset := 0
