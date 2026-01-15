@@ -18,7 +18,13 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	db, err := dbpkg.New(ctx, os.Getenv("DATABASE_URL"))
+	databaseUrl := os.Getenv("DATABASE_URL")
+
+	if databaseUrl == "" {
+		databaseUrl = "postgresql://udd-mirror:udd-mirror@udd-mirror.debian.net:5432/udd"
+	}
+
+	db, err := dbpkg.New(ctx, databaseUrl)
 	if err != nil {
 		log.Fatal(err)
 	}
