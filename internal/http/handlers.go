@@ -77,6 +77,7 @@ func (h *Handler) WNPP(w http.ResponseWriter, r *http.Request) {
 
 	search := r.URL.Query().Get("q")
 	order := r.URL.Query().Get("order")
+	direction := r.URL.Query().Get("direction")
 
 	log.Println("search:", search)
 
@@ -99,6 +100,7 @@ func (h *Handler) WNPP(w http.ResponseWriter, r *http.Request) {
 		limit,
 		offset,
 		order,
+		direction,
 		types,
 		search,
 		owner,

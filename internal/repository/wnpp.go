@@ -10,9 +10,9 @@ import (
 )
 
 type WNPPItem struct {
-	BugID        int       `json:"bug_id"`
-	Type         string    `json:"type"`
-	Source       string    `json:"source"`
+	BugID  int    `json:"bug_id"`
+	Type   string `json:"type"`
+	Source string `json:"source"`
 
 	WNPPPackage  string    `json:"wnpp_package"`
 	Arrival      time.Time `json:"arrival"`
@@ -40,21 +40,34 @@ func (r *WNPPRepository) List(
 	limit int,
 	offset int,
 	orderBy string,
+	direction string,
 	types []string,
 	search string,
 	owner *bool,
 ) ([]WNPPItem, error) {
 
 	// ---- ORDER BY whitelist
-	orderClause := "b.arrival DESC"
+	orderClause := "b.arrival"
 	switch orderBy {
 	case "arrival":
-		orderClause = "b.arrival DESC"
+		orderClause = "b.arrival"
 	case "installs":
-		orderClause = "p.insts DESC NULLS LAST"
+		orderClause = "p.insts"
 	case "users":
-		orderClause = "p.vote DESC NULLS LAST"
+		orderClause = "p.vote"
+	case "last_modified":
+		orderClause = "b.last_modified"
 	}
+
+	orderDirection := "DESC"
+	switch direction {
+	case "desc":
+		orderDirection = "DESC"
+	case "asc":
+		orderDirection = "ASC"
+	}
+
+	orderClauseComplete := orderClause + " " + orderDirection + " NULLS LAST "
 
 	baseWhere := `
 WHERE
@@ -117,7 +130,7 @@ LEFT JOIN public.popcon p
             '^[A-Z]{1,3}: ([^ ]+)'
           )
 ` + sourceWhere + `
-ORDER BY ` + orderClause + `
+ORDER BY ` + orderClauseComplete + `
 LIMIT $` + strconv.Itoa(argPos) + `
 OFFSET $` + strconv.Itoa(argPos+1)
 
@@ -165,7 +178,7 @@ LEFT JOIN public.popcon p
             '^[A-Z]{1,3}: ([^ ]+)'
           )
 ` + descWhere + `
-ORDER BY ` + orderClause + `
+ORDER BY ` + orderClauseComplete + `
 LIMIT $` + strconv.Itoa(argPos) + `
 OFFSET $` + strconv.Itoa(argPos+1)
 
